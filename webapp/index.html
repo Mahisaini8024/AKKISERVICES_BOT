@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>DIGITAL AKKI SERVICES — Official Store</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070913;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent-cyan: #00f0ff;
+      --accent-purple: #a855f7;
+      --accent-pink: #ec4899;
+      --accent-gold: #eab308;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --gradient-primary: linear-gradient(135deg, #00f0ff 0%, #a855f7 50%, #ec4899 100%);
+      --gradient-card: linear-gradient(145deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+      --gradient-btn: linear-gradient(135deg, #00f0ff 0%, #7000ff 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: 40px;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(236, 72, 153, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.08) 0%, transparent 60%);
+      background-attachment: fixed;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 16px 12px 20px;
+      position: relative;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      background: rgba(0, 240, 255, 0.08);
+      border: 1px solid rgba(0, 240, 255, 0.25);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    }
+
+    .brand-badge span {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    .title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Section Title */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 16px 4px 12px;
+    }
+
+    .section-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title i {
+      color: var(--accent-cyan);
+    }
+
+    .count-badge {
+      font-size: 11px;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      color: var(--accent-purple);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 700;
+    }
+
+    /* Single Line Service List */
+    .services-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .service-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 13px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .service-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent-cyan);
+      opacity: 0.7;
+    }
+
+    .service-card:nth-child(2n)::before { background: var(--accent-purple); }
+    .service-card:nth-child(3n)::before { background: var(--accent-pink); }
+    .service-card:nth-child(4n)::before { background: var(--accent-gold); }
+
+    .service-card:active {
+      transform: scale(0.98);
+      border-color: rgba(0, 240, 255, 0.4);
+      box-shadow: 0 4px 20px rgba(0, 240, 255, 0.15);
+    }
+
+    .service-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0; /* Prevents overflow */
+    }
+
+    .service-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .service-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .service-num {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+    }
+
+    .service-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-word;
+    }
+
+    .order-btn {
+      background: var(--gradient-btn);
+      border: none;
+      color: #ffffff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(0, 240, 255, 0.25);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .order-btn:active {
+      transform: scale(0.95);
+      box-shadow: 0 2px 8px rgba(0, 240, 255, 0.4);
+    }
+
+    /* Custom Idea Banner */
+    .idea-banner {
+      margin-top: 24px;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(236, 72, 153, 0.15) 100%);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 16px;
+      padding: 18px 16px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .idea-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--accent-gold);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .idea-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    .idea-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #eab308 0%, #ec4899 100%);
+      border: none;
+      color: #ffffff;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(234, 179, 8, 0.3);
+    }
+
+    /* Special Coupon Discount Banner */
+    .coupon-banner {
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(236, 72, 153, 0.2) 100%);
+      border: 1px dashed rgba(234, 179, 8, 0.6);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin: 8px 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: 0 4px 20px rgba(234, 179, 8, 0.15);
+      position: relative;
+      overflow: hidden;
+      animation: glowBorder 3s infinite alternate;
+    }
+
+    @keyframes glowBorder {
+      0% { border-color: rgba(234, 179, 8, 0.4); box-shadow: 0 4px 15px rgba(234, 179, 8, 0.1); }
+      100% { border-color: rgba(236, 72, 153, 0.8); box-shadow: 0 4px 25px rgba(236, 72, 153, 0.25); }
+    }
+
+    .coupon-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .coupon-tag {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--accent-gold);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .coupon-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    .coupon-timer {
+      font-size: 10.5px;
+      color: var(--accent-pink);
+      font-weight: 700;
+    }
+
+    .coupon-code-box {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px dashed var(--accent-gold);
+      border-radius: 10px;
+      padding: 6px 12px;
+      text-align: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+
+    .coupon-code-box:active {
+      transform: scale(0.95);
+    }
+
+    .coupon-code-text {
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--accent-gold);
+      letter-spacing: 1px;
+    }
+
+    .coupon-copy-lbl {
+      font-size: 8.5px;
+      color: var(--accent-cyan);
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--accent-cyan);
+      box-shadow: 0 8px 30px rgba(0, 240, 255, 0.3);
+      color: #ffffff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      z-index: 1000;
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 11px;
+      color: rgba(148, 163, 184, 0.6);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="brand-badge">
+      <span></span> DIGITAL AKKI SERVICES
+    </div>
+    <h1 class="title">PREMIUM SERVICES HUB</h1>
+    <p class="subtitle">🚀 Powerful Systems • Advanced Bots • Custom Solutions</p>
+  </div>
+
+  <!-- Special Coupon Banner -->
+  <div class="coupon-banner" onclick="applyCoupon()">
+    <div class="coupon-left">
+      <div class="coupon-tag">🎁 SPECIAL OFFER • FLAT 10% OFF</div>
+      <div class="coupon-title">Use Discount Code AKKI10</div>
+      <div class="coupon-timer" id="countdown">⏳ Offer Ends In: 04h 59m 50s</div>
+    </div>
+    <div class="coupon-code-box">
+      <div class="coupon-code-text">AKKI10</div>
+      <div class="coupon-copy-lbl">TAP TO APPLY</div>
+    </div>
+  </div>
+
+  <!-- Section Header -->
+  <div class="section-header">
+    <div class="section-title">
+      🔥 OUR MAIN SERVICES
+    </div>
+    <div class="count-badge">11 AVAILABLE</div>
+  </div>
+
+  <!-- Services List (Single Line Cards) -->
+  <div class="services-container">
+
+    <!-- 01 -->
+    <div class="service-card" onclick="orderService('01. Prediction Auto Bot System')">
+      <div class="service-left">
+        <div class="service-icon">🎯</div>
+        <div class="service-info">
+          <div class="service-num">Service 01</div>
+          <div class="service-title">Prediction Auto Bot System</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 02 -->
+    <div class="service-card" onclick="orderService('02. Auto Reaction, Views & Live Stream')">
+      <div class="service-left">
+        <div class="service-icon">🤖</div>
+        <div class="service-info">
+          <div class="service-num">Service 02</div>
+          <div class="service-title">Auto Reaction • Views • Live Stream</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 03 -->
+    <div class="service-card" onclick="orderService('03. Advanced Welcome Bot')">
+      <div class="service-left">
+        <div class="service-icon">👋</div>
+        <div class="service-info">
+          <div class="service-num">Service 03</div>
+          <div class="service-title">Advanced Welcome Bot System</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 04 -->
+    <div class="service-card" onclick="orderService('04. Auto Forwarding System')">
+      <div class="service-left">
+        <div class="service-icon">🔄</div>
+        <div class="service-info">
+          <div class="service-num">Service 04</div>
+          <div class="service-title">Auto Forwarding System</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 05 -->
+    <div class="service-card" onclick="orderService('05. Genuine Member Growth')">
+      <div class="service-left">
+        <div class="service-icon">👥</div>
+        <div class="service-info">
+          <div class="service-num">Service 05</div>
+          <div class="service-title">Genuine Member Growth Solutions</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 06 -->
+    <div class="service-card" onclick="orderService('06. Advanced Meta Ads Services')">
+      <div class="service-left">
+        <div class="service-icon">📈</div>
+        <div class="service-info">
+          <div class="service-num">Service 06</div>
+          <div class="service-title">Advanced Meta Ads Services</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 07 -->
+    <div class="service-card" onclick="orderService('07. Meta Ads Live Course + Training')">
+      <div class="service-left">
+        <div class="service-icon">🎓</div>
+        <div class="service-info">
+          <div class="service-num">Service 07</div>
+          <div class="service-title">Meta Ads Live Course + Training</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 08 -->
+    <div class="service-card" onclick="orderService('08. Group & Channel Solutions')">
+      <div class="service-left">
+        <div class="service-icon">🏪</div>
+        <div class="service-info">
+          <div class="service-num">Service 08</div>
+          <div class="service-title">Group & Channel Trade Solutions</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 09 -->
+    <div class="service-card" onclick="orderService('09. Hack Panel Development')">
+      <div class="service-left">
+        <div class="service-icon">🛠️</div>
+        <div class="service-info">
+          <div class="service-num">Service 09</div>
+          <div class="service-title">Hack Panel Development</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 10 -->
+    <div class="service-card" onclick="orderService('10. Landing Page & Website Development')">
+      <div class="service-left">
+        <div class="service-icon">🌐</div>
+        <div class="service-info">
+          <div class="service-num">Service 10</div>
+          <div class="service-title">Landing Page & Website Dev</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+    <!-- 11 -->
+    <div class="service-card" onclick="orderService('11. Custom Advanced Bot Development')">
+      <div class="service-left">
+        <div class="service-icon">🤖</div>
+        <div class="service-info">
+          <div class="service-num">Service 11</div>
+          <div class="service-title">Custom Advanced Bot Dev</div>
+        </div>
+      </div>
+      <button class="order-btn">💬 ORDER</button>
+    </div>
+
+  </div>
+
+  <!-- Custom Idea Banner -->
+  <div class="idea-banner">
+    <div class="idea-title">
+      💡 HAVE A CUSTOM IDEA?
+    </div>
+    <div class="idea-desc">
+      Aapka koi bhi concept, requirement ya custom logic ho — <b>We can build it!</b>
+    </div>
+    <button class="idea-btn" onclick="orderService('Custom Project Idea')">
+      📩 CONTACT DEVELOPER AKKI
+    </button>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    ⚡ Official Akki Services Bot • Professional • Scalable
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <span>🎉</span> <span id="toast-text">Coupon AKKI10 Applied! 10% OFF Added.</span>
+  </div>
+
+  <script>
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    const ADMIN_USERNAME = 'Developerakki';
+    let appliedCoupon = '';
+
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').innerText = text;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2500);
+    }
+
+    function applyCoupon() {
+      appliedCoupon = 'AKKI10';
+      showToast('🎁 Coupon AKKI10 Applied! 10% OFF Discount Added.');
+    }
+
+    // Live Countdown Timer
+    let totalSeconds = 4 * 3600 + 59 * 60 + 50;
+    setInterval(() => {
+      if (totalSeconds <= 0) return;
+      totalSeconds--;
+      const hrs = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const mins = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const secs = String(totalSeconds % 60).padStart(2, '0');
+      document.getElementById('countdown').innerText = `⏳ Offer Ends In: ${hrs}h ${mins}m ${secs}s`;
+    }, 1000);
+
+    function orderService(serviceTitle) {
+      let couponText = appliedCoupon ? ` (Discount Coupon: ${appliedCoupon} - 10% OFF)` : '';
+      const msg = `Hello Akki! I want to order: ${serviceTitle}${couponText}`;
+      const url = `https://t.me/${ADMIN_USERNAME}?text=${encodeURIComponent(msg)}`;
+      
+      if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink(url);
+      } else {
+        window.location.href = url;
+      }
+    }
+  </script>
+</body>
+</html>
