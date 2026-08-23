@@ -28,7 +28,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-WEBAPP_URL = "https://companion-grown-hook-neil.trycloudflare.com"
+WEBAPP_URL = "https://akkiservices-bot.onrender.com"
 
 async def setup_bot_commands(bot: Bot):
     commands = [

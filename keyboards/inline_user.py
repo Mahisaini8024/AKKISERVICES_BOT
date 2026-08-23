@@ -2,7 +2,7 @@ import urllib.parse
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from config import CATEGORIES, ADMIN_USERNAME
 
-WEBAPP_URL = "https://companion-grown-hook-neil.trycloudflare.com"
+WEBAPP_URL = "https://akkiservices-bot.onrender.com"
 
 def get_prefilled_dm_url(service_title: str) -> str:
     msg = f"Hello Akki! I want to order: {service_title}"
