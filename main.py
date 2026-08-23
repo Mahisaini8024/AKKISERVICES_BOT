@@ -36,16 +36,22 @@ WEBAPP_URL = "https://akkiservices-bot.onrender.com"
 async def handle_webapp_index(request):
     return web.FileResponse("webapp/index.html")
 
+async def handle_health(request):
+    return web.Response(text="OK", status=200)
+
 async def start_web_server():
     app = web.Application()
     app.router.add_get("/", handle_webapp_index)
-    app.router.add_static("/static/", path="webapp", name="static")
+    app.router.add_get("/health", handle_health)
+    if os.path.exists("webapp"):
+        app.router.add_static("/static/", path="webapp", name="static")
+    
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.getenv("PORT", 8080))
+    port = int(os.getenv("PORT", "10000"))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Web server started on port {port}")
+    logger.info(f"Web server successfully bound to 0.0.0.0:{port}")
 
 async def setup_bot_commands(bot: Bot):
     commands = [
