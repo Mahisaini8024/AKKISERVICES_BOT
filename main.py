@@ -28,7 +28,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import os
+from aiohttp import web
+
 WEBAPP_URL = "https://akkiservices-bot.onrender.com"
+
+async def handle_webapp_index(request):
+    return web.FileResponse("webapp/index.html")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_webapp_index)
+    app.router.add_static("/static/", path="webapp", name="static")
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Web server started on port {port}")
 
 async def setup_bot_commands(bot: Bot):
     commands = [
@@ -50,6 +67,12 @@ async def setup_bot_commands(bot: Bot):
 async def main():
     logger.info("Initializing Database...")
     await db.init_db()
+
+    # Start Aiohttp Web Server for Render Port Binding & Mini App Hosting
+    try:
+        await start_web_server()
+    except Exception as e:
+        logger.warning(f"Could not start web server: {e}")
 
     logger.info("Starting AKKI SERVICES Telegram Bot...")
     bot = Bot(
