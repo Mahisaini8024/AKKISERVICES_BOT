@@ -44,24 +44,34 @@ async def _notify_admin_start_lead(bot: Bot, user, referrer_id, existing_user):
     if admin_group_id:
         username_str = f"@{user.username}" if user.username else "No Username"
         ref_str = f"User ID `{referrer_id}`" if referrer_id else "Direct / Organic"
+        
+        # 1. Get or create user's dedicated forum topic
         thread_id = await get_or_create_user_topic(bot, admin_group_id, user, ref_str)
         
-        clean_first_name = (user.first_name or "").replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
-        clean_last_name = (user.last_name or "").replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
-        lead_group_text = (
-            f"🚀 **#NEW_LEAD**\n"
-            f"👤 {clean_first_name} {clean_last_name} ({username_str})\n"
-            f"🆔 `{user.id}` | 🎁 {ref_str}"
-        )
+        # 2. Record lead in database
         try:
-            await bot.send_message(
-                chat_id=admin_group_id,
-                message_thread_id=thread_id,
-                text=lead_group_text,
-                parse_mode="Markdown"
+            await db.add_lead(user.id, user.username or "", user.first_name or "", "bot_start", "User Clicked /start")
+        except Exception:
+            pass
+
+        # 3. Send notification in user's topic
+        if thread_id:
+            clean_first_name = (user.first_name or "").replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+            clean_last_name = (user.last_name or "").replace("_", "\\_").replace("*", "\\*").replace("`", "\\`")
+            lead_group_text = (
+                f"🚀 **#BOT_STARTED**\n"
+                f"👤 {clean_first_name} {clean_last_name} ({username_str})\n"
+                f"🆔 `{user.id}` | 🎁 {ref_str}"
             )
-        except Exception as e:
-            logger.warning(f"Could not send start lead alert to group: {e}")
+            try:
+                await bot.send_message(
+                    chat_id=admin_group_id,
+                    message_thread_id=thread_id,
+                    text=lead_group_text,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.warning(f"Could not send start lead alert to group: {e}")
 
 @user_router.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject, bot: Bot):
