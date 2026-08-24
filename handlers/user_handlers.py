@@ -111,7 +111,7 @@ async def cmd_start(message: Message, command: CommandObject, bot: Bot):
                     except Exception as e:
                         logger.warning(f"Could not notify referrer {referrer_id}: {e}")
 
-    asyncio.create_task(_notify_admin_start_lead(bot, user, referrer_id, existing_user))
+        await _notify_admin_start_lead(bot, user, referrer_id, existing_user)
 
 @user_router.message(Command("myid"))
 async def cmd_myid(message: Message):
