@@ -415,3 +415,35 @@ class Database:
                 VALUES (?, ?)
             """, (user_id, thread_id))
             await db.commit()
+
+    # Lead Tracking Methods
+    async def add_lead(self, user_id: int, username: str, first_name: str, service_code: str, service_title: str):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO leads (user_id, username, first_name, service_code, service_title)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, username, first_name, service_code, service_title))
+            await db.commit()
+
+    async def get_recent_leads(self, limit: int = 10):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT user_id, username, first_name, service_title, created_at
+                FROM leads
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (limit,))
+            return await cursor.fetchall()
+
+    async def get_leads_count(self) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("SELECT COUNT(*) FROM leads")
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+    async def get_all_services_db(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT code, title, category_id, is_active FROM services")
+            return await cursor.fetchall()

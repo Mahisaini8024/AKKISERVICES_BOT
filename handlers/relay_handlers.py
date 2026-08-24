@@ -133,17 +133,20 @@ import csv
 def admin_control_reply_kb() -> ReplyKeyboardMarkup:
     keyboard = [
         [
-            KeyboardButton(text="📅 Today Users"),
-            KeyboardButton(text="📊 All Users")
+            KeyboardButton(text="🚀 Active Leads"),
+            KeyboardButton(text="📢 All Broadcast")
         ],
         [
-            KeyboardButton(text="🔍 Search UID"),
-            KeyboardButton(text="📢 Broadcast")
+            KeyboardButton(text="📢 Client Notice"),
+            KeyboardButton(text="🛒 Services List")
         ],
         [
-            KeyboardButton(text="📬 Export"),
-            KeyboardButton(text="📈 Stats"),
-            KeyboardButton(text="📋 Approved UIDs")
+            KeyboardButton(text="🎁 Referral Stats"),
+            KeyboardButton(text="📊 Executive Stats")
+        ],
+        [
+            KeyboardButton(text="📬 Export Leads CSV"),
+            KeyboardButton(text="🛡️ Admin Status")
         ]
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -151,100 +154,117 @@ def admin_control_reply_kb() -> ReplyKeyboardMarkup:
 @relay_router.message(Command("panel", "admin", "bcpanel"))
 async def cmd_admin_panel_group(message: Message):
     await message.reply(
-        "🎛️ **Admin Control Panel** ──────────────────\n"
-        "Select an option using the buttons below:",
+        "🎛️ **AKKI SERVICES - ADMIN CONTROL CENTER** ⚡\n──────────────────────────────\n"
+        "Select an administrative feature below to manage your bot & clients:",
         reply_markup=admin_control_reply_kb(),
         parse_mode="Markdown"
     )
 
 # -------------------------------------------------------------
-# 2.1 ADMIN REPLY KEYBOARD BUTTON HANDLERS
+# 2.1 BUSINESS BUTTON HANDLERS FOR AKKI SERVICES BOT
 # -------------------------------------------------------------
 
-@relay_router.message(F.text == "📅 Today Users")
-async def handle_btn_today_users(message: Message):
-    count = await db.get_today_users_count()
-    today_list = await db.get_today_users()
-    text = f"📅 **TODAY'S NEW USERS ({count})** ⚡\n──────────────────\n"
-    if today_list:
-        for u in today_list[:15]:
-            un = f"@{u['username']}" if u['username'] else "No Username"
-            text += f"• `{u['user_id']}` | {u['first_name']} ({un})\n"
+@relay_router.message(F.text == "🚀 Active Leads")
+async def handle_btn_active_leads(message: Message):
+    count = await db.get_leads_count()
+    recent = await db.get_recent_leads(10)
+    text = f"🚀 **ACTIVE CLIENT LEADS ({count})** ⚡\n──────────────────────────────\n"
+    if recent:
+        for l in recent:
+            un = f"@{l['username']}" if l['username'] else "No Username"
+            text += f"• **Client:** {l['first_name']} ({un}) | `{l['user_id']}`\n  └ 💼 **Service:** `{l['service_title']}`\n"
     else:
-        text += "No new users joined today yet."
+        text += "No active service leads recorded yet.\n*When users click services, leads appear here automatically!*"
     await message.reply(text, parse_mode="Markdown")
 
-@relay_router.message(F.text == "📊 All Users")
-async def handle_btn_all_users(message: Message):
-    count = await db.get_user_count()
-    users = await db.get_all_users()
-    text = f"📊 **TOTAL REGISTERED USERS ({count})** ⚡\n──────────────────\n"
-    for u in users[:15]:
-        un = f"@{u['username']}" if u['username'] else "No Username"
-        text += f"• `{u['user_id']}` | {u['first_name']} ({un})\n"
-    if count > 15:
-        text += f"\n*...and {count - 15} more users.*"
-    await message.reply(text, parse_mode="Markdown")
-
-@relay_router.message(F.text == "🔍 Search UID")
-async def handle_btn_search_uid(message: Message):
+@relay_router.message(F.text == "📢 All Broadcast")
+async def handle_btn_all_broadcast(message: Message):
     await message.reply(
-        "🔍 **SEARCH USER BY UID:**\n\n"
-        "User ko search karne ke liye command use karein:\n"
-        "`/user <User_ID>` (e.g. `/user 6556791395`)",
-        parse_mode="Markdown"
-    )
-
-@relay_router.message(F.text == "📢 Broadcast")
-async def handle_btn_broadcast(message: Message):
-    await message.reply(
-        "📢 **ALL USERS BROADCAST MODE** 🚀\n\n"
-        "Is message ko **REPLY** karke wo Text, Photo ya Video bhejein jo aap **SABHI USERS** ko broadcast karna chahte hain!\n\n"
+        "📢 **ALL USERS BROADCAST MODE** 🚀\n──────────────────────────────\n"
+        "Is message ko **REPLY** karke wo Text, Photo ya Video bhejein jo aap **SABHI BOT USERS** ko broadcast karna chahte hain!\n\n"
         "*(ya `# General` me `/broadcast <your_text>` likhein)*",
         parse_mode="Markdown"
     )
 
-@relay_router.message(F.text == "📬 Export")
-async def handle_btn_export(message: Message):
+@relay_router.message(F.text == "📢 Client Notice")
+async def handle_btn_client_notice(message: Message):
+    await message.reply(
+        "📢 **SINGLE CLIENT NOTICE MODE** 👤\n──────────────────────────────\n"
+        "1. Kisi client ke **Personal Chat Topic** ke andar jayein.\n"
+        "2. Wahan header me **`📢 Send Notice`** button dabayein ya `/broadcast <text>` likhein.\n"
+        "3. Client ko unke PM me Official Announcement Card receive hoga!",
+        parse_mode="Markdown"
+    )
+
+@relay_router.message(F.text == "🛒 Services List")
+async def handle_btn_services_list(message: Message):
+    services = await db.get_all_services_db()
+    text = f"🛒 **AKKI SERVICES CATALOG ({len(services)})** ⚡\n──────────────────────────────\n"
+    for s in services:
+        status_icon = "🟢 Active" if s["is_active"] else "🔴 Disabled"
+        text += f"• **{s['title']}**\n  └ Code: `{s['code']}` | Status: {status_icon}\n\n"
+    await message.reply(text, parse_mode="Markdown")
+
+@relay_router.message(F.text == "🎁 Referral Stats")
+async def handle_btn_referral_stats(message: Message):
+    ref_stats = await db.get_referral_stats_admin()
+    top_ref = await db.get_top_referrers(5)
+    text = (
+        "🎁 **REFERRAL PROGRAM ANALYTICS** 💎\n──────────────────────────────\n"
+        f"📊 **Total Referrals Tracked:** `{ref_stats['total_referrals']}`\n"
+        f"💎 **Total Bonus Points Awarded:** `{ref_stats['total_points_awarded']}`\n\n"
+        "🏆 **TOP REFERRERS LEADERBOARD:**\n"
+    )
+    if top_ref:
+        for idx, r in enumerate(top_ref, 1):
+            un = f"@{r['username']}" if r['username'] else "User"
+            text += f"{idx}. {r['first_name']} ({un}) — `{r['referral_count']}` Refers ({r['points']} Pts)\n"
+    else:
+        text += "No referral activity recorded yet."
+    await message.reply(text, parse_mode="Markdown")
+
+@relay_router.message(F.text == "📊 Executive Stats")
+async def handle_btn_executive_stats(message: Message):
+    total_users = await db.get_user_count()
+    today_users = await db.get_today_users_count()
+    total_leads = await db.get_leads_count()
+    ref_stats = await db.get_referral_stats_admin()
+    text = (
+        "📈 **AKKI SERVICES - EXECUTIVE DASHBOARD** ⚡\n──────────────────────────────\n"
+        f"👥 **Total Registered Users:** `{total_users}`\n"
+        f"📅 **New Users Today:** `{today_users}`\n"
+        f"💼 **Total Client Leads:** `{total_leads}`\n"
+        f"🎁 **Total Referrals:** `{ref_stats['total_referrals']}`\n"
+        "──────────────────────────────\n"
+        "🟢 **Cloud Server Status:** 100% Operational (Render 24/7)"
+    )
+    await message.reply(text, parse_mode="Markdown")
+
+@relay_router.message(F.text == "📬 Export Leads CSV")
+async def handle_btn_export_leads_csv(message: Message):
     users = await db.get_all_users_full()
-    csv_path = "users_export.csv"
+    csv_path = "akki_clients_export.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["User ID", "Username", "First Name", "Last Name", "Points", "Referrals", "Joined At"])
+        writer.writerow(["User ID", "Username", "First Name", "Last Name", "Points", "Referrals", "Joined Date"])
         for u in users:
             writer.writerow([u["user_id"], u["username"] or "", u["first_name"] or "", u["last_name"] or "", u["points"], u["referral_count"], u["joined_at"]])
     
     doc = FSInputFile(csv_path)
     await message.reply_document(
         document=doc,
-        caption=f"📬 **ALL USERS CSV EXPORT**\nTotal Records: `{len(users)}` Users",
+        caption=f"📬 **AKKI SERVICES CLIENT DATABASE EXPORT**\nTotal Client Records: `{len(users)}` Users",
         parse_mode="Markdown"
     )
 
-@relay_router.message(F.text == "📈 Stats")
-async def handle_btn_stats(message: Message):
-    total_users = await db.get_user_count()
-    today_users = await db.get_today_users_count()
-    ref_stats = await db.get_referral_stats_admin()
+@relay_router.message(F.text == "🛡️ Admin Status")
+async def handle_btn_admin_status(message: Message):
+    group_id = await db.get_admin_group_id()
     text = (
-        "📈 **EXECUTIVE BOT STATISTICS** ⚡\n"
-        "──────────────────\n"
-        f"👥 **Total Registered Users:** `{total_users}`\n"
-        f"📅 **New Users Today:** `{today_users}`\n"
-        f"🎁 **Total Referrals Processed:** `{ref_stats['total_referrals']}`\n"
-        f"💎 **Total Referral Points:** `{ref_stats['total_points_awarded']}`\n"
-        "──────────────────\n"
-        "🟢 **Bot Health:** 100% Operational (Render Cloud 24/7)"
-    )
-    await message.reply(text, parse_mode="Markdown")
-
-@relay_router.message(F.text == "📋 Approved UIDs")
-async def handle_btn_approved_uids(message: Message):
-    text = (
-        "📋 **APPROVED ADMINS & UIDs** 🛡️\n"
-        "──────────────────\n"
-        f"👑 **Owner / Super Admin:** @{ADMIN_USERNAME}\n"
-        "✅ **Status:** Authorized & Approved"
+        "🛡️ **ADMIN CONTROL CENTER STATUS** ⚡\n──────────────────────────────\n"
+        f"👑 **Main Developer / Owner:** @{ADMIN_USERNAME}\n"
+        f"👥 **Linked Admin Group ID:** `{group_id or 'Not Set'}`\n"
+        "✅ **Security Status:** Authorized & Verified"
     )
     await message.reply(text, parse_mode="Markdown")
 
