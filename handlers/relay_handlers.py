@@ -127,20 +127,126 @@ async def cmd_group_id(message: Message):
 # 2. BROADCAST & CONTROL PANEL COMMANDS
 # -------------------------------------------------------------
 
-@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("panel", "admin", "bcpanel"))
-async def cmd_admin_panel_group(message: Message):
-    panel_kb = InlineKeyboardMarkup(inline_keyboard=[
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+import csv
+
+def admin_control_reply_kb() -> ReplyKeyboardMarkup:
+    keyboard = [
         [
-            InlineKeyboardButton(text="📢 Broadcast All Users", callback_data="btn_bc_all_prompt")
+            KeyboardButton(text="📅 Today Users"),
+            KeyboardButton(text="📊 All Users")
+        ],
+        [
+            KeyboardButton(text="🔍 Search UID"),
+            KeyboardButton(text="📢 Broadcast")
+        ],
+        [
+            KeyboardButton(text="📬 Export"),
+            KeyboardButton(text="📈 Stats"),
+            KeyboardButton(text="📋 Approved UIDs")
         ]
-    ])
+    ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+@relay_router.message(Command("panel", "admin", "bcpanel"))
+async def cmd_admin_panel_group(message: Message):
     await message.reply(
-        "⚡ **ADMIN BROADCAST CONTROL PANEL** ⚡\n\n"
-        "• All Users ko message bhejne ke liye niche button dabayein ya `/broadcast <text>` likhein.\n"
-        "• Single Client ko topic me `📢 Send Notice` button dabayein.",
-        reply_markup=panel_kb,
+        "🎛️ **Admin Control Panel** ──────────────────\n"
+        "Select an option using the buttons below:",
+        reply_markup=admin_control_reply_kb(),
         parse_mode="Markdown"
     )
+
+# -------------------------------------------------------------
+# 2.1 ADMIN REPLY KEYBOARD BUTTON HANDLERS
+# -------------------------------------------------------------
+
+@relay_router.message(F.text == "📅 Today Users")
+async def handle_btn_today_users(message: Message):
+    count = await db.get_today_users_count()
+    today_list = await db.get_today_users()
+    text = f"📅 **TODAY'S NEW USERS ({count})** ⚡\n──────────────────\n"
+    if today_list:
+        for u in today_list[:15]:
+            un = f"@{u['username']}" if u['username'] else "No Username"
+            text += f"• `{u['user_id']}` | {u['first_name']} ({un})\n"
+    else:
+        text += "No new users joined today yet."
+    await message.reply(text, parse_mode="Markdown")
+
+@relay_router.message(F.text == "📊 All Users")
+async def handle_btn_all_users(message: Message):
+    count = await db.get_user_count()
+    users = await db.get_all_users()
+    text = f"📊 **TOTAL REGISTERED USERS ({count})** ⚡\n──────────────────\n"
+    for u in users[:15]:
+        un = f"@{u['username']}" if u['username'] else "No Username"
+        text += f"• `{u['user_id']}` | {u['first_name']} ({un})\n"
+    if count > 15:
+        text += f"\n*...and {count - 15} more users.*"
+    await message.reply(text, parse_mode="Markdown")
+
+@relay_router.message(F.text == "🔍 Search UID")
+async def handle_btn_search_uid(message: Message):
+    await message.reply(
+        "🔍 **SEARCH USER BY UID:**\n\n"
+        "User ko search karne ke liye command use karein:\n"
+        "`/user <User_ID>` (e.g. `/user 6556791395`)",
+        parse_mode="Markdown"
+    )
+
+@relay_router.message(F.text == "📢 Broadcast")
+async def handle_btn_broadcast(message: Message):
+    await message.reply(
+        "📢 **ALL USERS BROADCAST MODE** 🚀\n\n"
+        "Is message ko **REPLY** karke wo Text, Photo ya Video bhejein jo aap **SABHI USERS** ko broadcast karna chahte hain!\n\n"
+        "*(ya `# General` me `/broadcast <your_text>` likhein)*",
+        parse_mode="Markdown"
+    )
+
+@relay_router.message(F.text == "📬 Export")
+async def handle_btn_export(message: Message):
+    users = await db.get_all_users_full()
+    csv_path = "users_export.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["User ID", "Username", "First Name", "Last Name", "Points", "Referrals", "Joined At"])
+        for u in users:
+            writer.writerow([u["user_id"], u["username"] or "", u["first_name"] or "", u["last_name"] or "", u["points"], u["referral_count"], u["joined_at"]])
+    
+    doc = FSInputFile(csv_path)
+    await message.reply_document(
+        document=doc,
+        caption=f"📬 **ALL USERS CSV EXPORT**\nTotal Records: `{len(users)}` Users",
+        parse_mode="Markdown"
+    )
+
+@relay_router.message(F.text == "📈 Stats")
+async def handle_btn_stats(message: Message):
+    total_users = await db.get_user_count()
+    today_users = await db.get_today_users_count()
+    ref_stats = await db.get_referral_stats_admin()
+    text = (
+        "📈 **EXECUTIVE BOT STATISTICS** ⚡\n"
+        "──────────────────\n"
+        f"👥 **Total Registered Users:** `{total_users}`\n"
+        f"📅 **New Users Today:** `{today_users}`\n"
+        f"🎁 **Total Referrals Processed:** `{ref_stats['total_referrals']}`\n"
+        f"💎 **Total Referral Points:** `{ref_stats['total_points_awarded']}`\n"
+        "──────────────────\n"
+        "🟢 **Bot Health:** 100% Operational (Render Cloud 24/7)"
+    )
+    await message.reply(text, parse_mode="Markdown")
+
+@relay_router.message(F.text == "📋 Approved UIDs")
+async def handle_btn_approved_uids(message: Message):
+    text = (
+        "📋 **APPROVED ADMINS & UIDs** 🛡️\n"
+        "──────────────────\n"
+        f"👑 **Owner / Super Admin:** @{ADMIN_USERNAME}\n"
+        "✅ **Status:** Authorized & Approved"
+    )
+    await message.reply(text, parse_mode="Markdown")
 
 @relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("broadcast", "bc", "sendall"))
 async def cmd_broadcast_group(message: Message, command: CommandObject, bot: Bot):

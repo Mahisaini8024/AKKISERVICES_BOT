@@ -164,6 +164,24 @@ class Database:
             cursor = await db.execute("SELECT user_id, username, first_name FROM users WHERE is_banned = 0")
             return await cursor.fetchall()
 
+    async def get_all_users_full(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT user_id, username, first_name, last_name, points, referral_count, joined_at FROM users ORDER BY joined_at DESC")
+            return await cursor.fetchall()
+
+    async def get_today_users_count(self) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("SELECT COUNT(*) FROM users WHERE DATE(joined_at) = DATE('now')")
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+    async def get_today_users(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT user_id, username, first_name, joined_at FROM users WHERE DATE(joined_at) = DATE('now') ORDER BY joined_at DESC")
+            return await cursor.fetchall()
+
     # Referral Program Methods
     async def process_referral(self, new_user_id: int, referrer_id: int, points: int = 10) -> tuple[bool, str]:
         """Validate and reward referrer when a new user joins via link"""
