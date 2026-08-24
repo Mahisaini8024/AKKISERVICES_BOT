@@ -2,7 +2,7 @@ import re
 import asyncio
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import Message, ReactionTypeEmoji
+from aiogram.types import Message, ReactionTypeEmoji, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command, CommandObject
 from aiogram.enums import ChatType
 
@@ -26,12 +26,10 @@ async def delete_after(message: Message, delay_seconds: int = 3):
 
 async def get_or_create_user_topic(bot: Bot, group_id: int, user, referrer_str: str = "Direct") -> int | None:
     """Get existing forum topic ID for user or automatically create a new one"""
-    # 1. Check if user already has a topic in DB
     existing_thread_id = await db.get_user_thread_id(user.id)
     if existing_thread_id:
         return existing_thread_id
 
-    # 2. Try to create a clean topic name (only Name, no User ID)
     full_name = f"{user.first_name} {user.last_name or ''}".strip()
     clean_name = full_name[:25] if full_name else "Client"
     topic_name = f"👤 {clean_name}"
@@ -44,7 +42,6 @@ async def get_or_create_user_topic(bot: Bot, group_id: int, user, referrer_str: 
         thread_id = topic.message_thread_id
         await db.save_user_topic(user.id, thread_id)
 
-        # Short & clean profile header with Action Buttons
         username_str = f"@{user.username}" if user.username else "No Username"
         profile_card = (
             f"👤 **Client:** {user.first_name} {user.last_name or ''} ({username_str})\n"
@@ -52,7 +49,6 @@ async def get_or_create_user_topic(bot: Bot, group_id: int, user, referrer_str: 
             f"💬 *Reply in this topic to chat with client.*"
         )
         
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         action_kb = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text="📢 Send Notice", callback_data=f"btn_bc_single:{user.id}"),
@@ -77,12 +73,11 @@ async def get_or_create_user_topic(bot: Bot, group_id: int, user, referrer_str: 
         return await db.get_admin_thread_id()
 
 # -------------------------------------------------------------
-# 1. GROUP COMMANDS & SETTINGS
+# 1. GROUP COMMANDS & SETTINGS (EVALUATED FIRST)
 # -------------------------------------------------------------
 
 @relay_router.message(F.chat.type == ChatType.PRIVATE, Command("setgroup", "setadmingroup"))
 async def cmd_set_group_dm(message: Message, command: CommandObject):
-    """Handle /setgroup in Private DM"""
     args = command.args
     if args and (args.strip().startswith("-") or args.strip().isdigit()):
         try:
@@ -105,7 +100,6 @@ async def cmd_set_group_dm(message: Message, command: CommandObject):
 
 @relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("setgroup", "setadmingroup"))
 async def cmd_set_group(message: Message):
-    """Set current group as the main admin notification & live chat relay group"""
     group_id = message.chat.id
     group_title = message.chat.title or "Admin Group"
     thread_id = message.message_thread_id
@@ -130,26 +124,303 @@ async def cmd_group_id(message: Message):
     )
 
 # -------------------------------------------------------------
-# 2. ADMIN SENDS MESSAGE IN TOPIC OR REPLIES -> DELIVER TO USER IN PM
+# 2. BROADCAST & CONTROL PANEL COMMANDS
+# -------------------------------------------------------------
+
+@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("panel", "admin", "bcpanel"))
+async def cmd_admin_panel_group(message: Message):
+    panel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📢 Broadcast All Users", callback_data="btn_bc_all_prompt")
+        ]
+    ])
+    await message.reply(
+        "⚡ **ADMIN BROADCAST CONTROL PANEL** ⚡\n\n"
+        "• All Users ko message bhejne ke liye niche button dabayein ya `/broadcast <text>` likhein.\n"
+        "• Single Client ko topic me `📢 Send Notice` button dabayein.",
+        reply_markup=panel_kb,
+        parse_mode="Markdown"
+    )
+
+@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("broadcast", "bc", "sendall"))
+async def cmd_broadcast_group(message: Message, command: CommandObject, bot: Bot):
+    thread_id = message.message_thread_id
+    text_to_send = command.args
+    reply_msg = message.reply_to_message
+
+    if not text_to_send and not reply_msg:
+        usage = (
+            "📢 **BROADCAST SYSTEM USAGE:**\n\n"
+            "• **All Users Broadcast (General Topic):**\n"
+            "  `/broadcast Hello Everyone! New services added in Bot!`\n"
+            "  *ya kisi photo/video ko reply karke `/broadcast` likhein.*\n\n"
+            "• **Single Client Personal Broadcast (User Topic me):**\n"
+            "  User topic ke andar `/broadcast <text>` chalane par sirf us specific client ko announcement card jayega!"
+        )
+        msg = await message.reply(usage, parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 10))
+        return
+
+    target_user_id = None
+    if thread_id:
+        target_user_id = await db.get_user_by_thread_id(thread_id)
+
+    # SCENARIO 1: SINGLE USER BROADCAST (Inside User Topic)
+    if target_user_id:
+        try:
+            if reply_msg:
+                await bot.copy_message(
+                    chat_id=target_user_id,
+                    from_chat_id=message.chat.id,
+                    message_id=reply_msg.message_id
+                )
+            else:
+                card_text = (
+                    f"📢 **OFFICIAL ANNOUNCEMENT FROM AKKI SERVICES** ⚡\n\n"
+                    f"{text_to_send}\n\n"
+                    f"💬 Contact Developer: @{ADMIN_USERNAME}"
+                )
+                await bot.send_message(
+                    chat_id=target_user_id,
+                    text=card_text,
+                    parse_mode="Markdown"
+                )
+            
+            conf = await message.reply(f"✅ **Personal Broadcast Notice Sent to Client!** (ID: `{target_user_id}`)", parse_mode="Markdown")
+            asyncio.create_task(delete_after(conf, 4))
+        except Exception as e:
+            err = await message.reply(f"❌ **Failed to send to client:** `{e}`", parse_mode="Markdown")
+            asyncio.create_task(delete_after(err, 5))
+        return
+
+    # SCENARIO 2: ALL USERS BROADCAST (General / Main Group)
+    users = await db.get_all_users()
+    if not users:
+        msg = await message.reply("⚠️ Database me koi users nahi mile.", parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 5))
+        return
+
+    status_msg = await message.reply(f"⏳ **Broadcasting message to {len(users)} users...**", parse_mode="Markdown")
+
+    success_count = 0
+    fail_count = 0
+
+    for u in users:
+        uid = u["user_id"]
+        try:
+            if reply_msg:
+                await bot.copy_message(
+                    chat_id=uid,
+                    from_chat_id=message.chat.id,
+                    message_id=reply_msg.message_id
+                )
+            else:
+                card_text = (
+                    f"📢 **AKKI SERVICES ANNOUNCEMENT** ⚡\n\n"
+                    f"{text_to_send}\n\n"
+                    f"💬 Direct DM: @{ADMIN_USERNAME}"
+                )
+                await bot.send_message(
+                    chat_id=uid,
+                    text=card_text,
+                    parse_mode="Markdown"
+                )
+            success_count += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            fail_count += 1
+
+    report = (
+        "📢 **BROADCAST COMPLETED!** 🚀\n"
+        "─────────────────────────\n"
+        f"✅ **Delivered:** `{success_count}` Users\n"
+        f"❌ **Failed/Blocked:** `{fail_count}` Users\n"
+        f"👥 **Total Reached:** `{len(users)}` Users"
+    )
+    await status_msg.edit_text(report, parse_mode="Markdown")
+
+# -------------------------------------------------------------
+# 3. TOPIC STATUS SYSTEM (/status)
+# -------------------------------------------------------------
+
+STATUS_CONFIG = {
+    "lead": ("🟡", "LEAD", "NEW LEAD"),
+    "1": ("🟡", "LEAD", "NEW LEAD"),
+    "deal": ("💬", "DISCUSSING", "DISCUSSING REQUIREMENT"),
+    "2": ("💬", "DISCUSSING", "DISCUSSING REQUIREMENT"),
+    "paid": ("💰", "PAID", "PAID CLIENT"),
+    "3": ("💰", "PAID", "PAID CLIENT"),
+    "progress": ("🚀", "IN DEV", "PROJECT IN DEVELOPMENT"),
+    "4": ("🚀", "IN DEV", "PROJECT IN DEVELOPMENT"),
+    "done": ("✅", "DONE", "PROJECT COMPLETED"),
+    "5": ("✅", "DONE", "PROJECT COMPLETED"),
+    "hold": ("⏸️", "HOLD", "ON HOLD"),
+    "6": ("⏸️", "HOLD", "ON HOLD"),
+    "closed": ("🔒", "CLOSED", "TOPIC CLOSED"),
+    "7": ("🔒", "CLOSED", "TOPIC CLOSED")
+}
+
+def topic_status_kb() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton(text="🟡 Lead", callback_data="tstatus:lead"),
+            InlineKeyboardButton(text="💬 Discussing", callback_data="tstatus:deal")
+        ],
+        [
+            InlineKeyboardButton(text="💰 Paid", callback_data="tstatus:paid"),
+            InlineKeyboardButton(text="🚀 In Dev", callback_data="tstatus:progress")
+        ],
+        [
+            InlineKeyboardButton(text="✅ Done", callback_data="tstatus:done"),
+            InlineKeyboardButton(text="⏸️ On Hold", callback_data="tstatus:hold")
+        ],
+        [
+            InlineKeyboardButton(text="🔒 Close Topic", callback_data="tstatus:closed")
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("status"))
+async def cmd_topic_status(message: Message, command: CommandObject, bot: Bot):
+    thread_id = message.message_thread_id
+    if not thread_id:
+        msg = await message.reply("⚠️ `/status` command ko kisi user ke topic ke andar bhejein!", parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 5))
+        return
+
+    target_user_id = await db.get_user_by_thread_id(thread_id)
+    if not target_user_id:
+        msg = await message.reply("⚠️ Yeh topic kisi registered user se linked nahi hai.", parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 5))
+        return
+
+    args = (command.args or "").strip().lower().split()
+    
+    if not args:
+        await message.reply(
+            "🚥 **SELECT TOPIC STATUS:**\n\nChoose a status below to rename & update this client topic:",
+            reply_markup=topic_status_kb(),
+            parse_mode="Markdown"
+        )
+        return
+
+    status_key = args[0]
+    notify_user = len(args) > 1 and args[1] in ["notify", "yes", "true", "pm"]
+    
+    await apply_topic_status(bot, message.chat.id, thread_id, target_user_id, status_key, notify_user, message)
+
+async def apply_topic_status(bot: Bot, group_id: int, thread_id: int, user_id: int, status_key: str, notify_user: bool, trigger_msg: Message = None):
+    if status_key not in STATUS_CONFIG:
+        if trigger_msg:
+            msg = await trigger_msg.reply(
+                "⚠️ **Invalid Status!** Use:\n"
+                "• `/status 1` (Lead) | `/status 2` (Discussing)\n"
+                "• `/status 3` (Paid) | `/status 4` (In Dev)\n"
+                "• `/status 5` (Done) | `/status 6` (Hold) | `/status 7` (Closed)",
+                parse_mode="Markdown"
+            )
+            asyncio.create_task(delete_after(msg, 6))
+        return
+
+    emoji, badge, full_status = STATUS_CONFIG[status_key]
+    user = await db.get_user(user_id)
+    user_name = user["first_name"] if user and user.get("first_name") else "Client"
+    
+    new_topic_name = f"{emoji} 👤 {user_name[:18]} [{badge}]"
+    try:
+        await bot.edit_forum_topic(
+            chat_id=group_id,
+            message_thread_id=thread_id,
+            name=new_topic_name
+        )
+    except Exception as e:
+        logger.warning(f"Could not edit topic name: {e}")
+
+    if trigger_msg:
+        conf = await trigger_msg.reply(f"✅ **Topic Status Updated:** {emoji} `{full_status}`", parse_mode="Markdown")
+        asyncio.create_task(delete_after(conf, 3))
+
+    if notify_user:
+        try:
+            user_msg = (
+                f"🚦 **PROJECT STATUS UPDATE** ⚡\n\n"
+                f"📌 **Status:** {emoji} **{full_status}**\n"
+                f"💬 Contact Developer: @{ADMIN_USERNAME}"
+            )
+            await bot.send_message(
+                chat_id=user_id,
+                text=user_msg,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.warning(f"Could not notify user of status update: {e}")
+
+# -------------------------------------------------------------
+# 4. CALLBACK QUERY HANDLERS FOR INLINE BUTTONS
+# -------------------------------------------------------------
+
+@relay_router.callback_query(F.data.startswith("tstatus:"))
+async def cb_topic_status_selected(callback: CallbackQuery, bot: Bot):
+    await callback.answer()
+    status_key = callback.data.split(":")[1]
+    thread_id = callback.message.message_thread_id
+    if not thread_id:
+        return
+    
+    target_user_id = await db.get_user_by_thread_id(thread_id)
+    if not target_user_id:
+        return
+        
+    await apply_topic_status(bot, callback.message.chat.id, thread_id, target_user_id, status_key, False, callback.message)
+
+@relay_router.callback_query(F.data.startswith("btn_bc_single:"))
+async def cb_btn_bc_single(callback: CallbackQuery):
+    await callback.answer()
+    user_id = callback.data.split(":")[1]
+    prompt = (
+        f"📢 **PERSONAL CLIENT BROADCAST MODE** ⚡\n\n"
+        f"Is message ko **REPLY** karke text, photo ya video bhejein — wo DIRECT User ID `{user_id}` ko Official Notice card ki tarah deliver hoga!\n\n"
+        f"*(ya `/broadcast <your_text>` likhein)*"
+    )
+    await callback.message.reply(prompt, parse_mode="Markdown")
+
+@relay_router.callback_query(F.data.startswith("btn_status_menu:"))
+async def cb_btn_status_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.reply(
+        "🚥 **SELECT TOPIC STATUS:**\n\nChoose a status below to rename & update this client topic:",
+        reply_markup=topic_status_kb(),
+        parse_mode="Markdown"
+    )
+
+@relay_router.callback_query(F.data == "btn_bc_all_prompt")
+async def cb_btn_bc_all_prompt(callback: CallbackQuery):
+    await callback.answer()
+    prompt = (
+        "📢 **ALL USERS BROADCAST MODE** 🚀\n\n"
+        "Is message ko **REPLY** karke wo Text, Photo ya Video bhejein jo aap **SABHI USERS** ko broadcast karna chahte hain!\n\n"
+        "*(ya `# General` me `/broadcast <your_text>` likhkar send karein)*"
+    )
+    await callback.message.reply(prompt, parse_mode="Markdown")
+
+# -------------------------------------------------------------
+# 5. ADMIN MESSAGES IN USER TOPICS (RELAID TO CLIENT DM)
 # -------------------------------------------------------------
 
 @relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
 async def handle_group_admin_message(message: Message, bot: Bot):
-    # Ignore commands
+    # Ignore slash commands
     if message.text and message.text.startswith("/"):
         return
 
-    # Check if message is inside a user's dedicated topic
     target_user_id = None
     if message.message_thread_id:
         target_user_id = await db.get_user_by_thread_id(message.message_thread_id)
 
-    # If not a topic message, check if it is a reply to a forwarded message
     if not target_user_id and message.reply_to_message:
         replied_msg = message.reply_to_message
         target_user_id = await db.get_user_by_group_message_id(replied_msg.message_id)
 
-        # Fallback: Parse User ID from message text or caption
         if not target_user_id:
             search_text = replied_msg.text or replied_msg.caption or ""
             id_match = re.search(r"(?:User ID|ID)[:\s]+`?(\d{5,})`?", search_text, re.IGNORECASE)
@@ -157,9 +428,75 @@ async def handle_group_admin_message(message: Message, bot: Bot):
                 target_user_id = int(id_match.group(1))
 
     if not target_user_id:
-        return  # Not in a user topic and not a reply to user
+        return
 
-    # Deliver message to user in PM (Clean & Direct)
+    # Check if this message is a reply to an All-User Broadcast prompt or Personal Broadcast prompt
+    if message.reply_to_message and message.reply_to_message.text:
+        reply_text = message.reply_to_message.text
+        if "ALL USERS BROADCAST MODE" in reply_text:
+            # Trigger all user broadcast with this message
+            users = await db.get_all_users()
+            if not users:
+                msg = await message.reply("⚠️ Database me koi users nahi mile.", parse_mode="Markdown")
+                asyncio.create_task(delete_after(msg, 5))
+                return
+
+            status_msg = await message.reply(f"⏳ **Broadcasting message to {len(users)} users...**", parse_mode="Markdown")
+            success_count = 0
+            fail_count = 0
+
+            for u in users:
+                uid = u["user_id"]
+                try:
+                    await bot.copy_message(
+                        chat_id=uid,
+                        from_chat_id=message.chat.id,
+                        message_id=message.message_id
+                    )
+                    success_count += 1
+                    await asyncio.sleep(0.05)
+                except Exception:
+                    fail_count += 1
+
+            report = (
+                "📢 **BROADCAST COMPLETED!** 🚀\n"
+                "─────────────────────────\n"
+                f"✅ **Delivered:** `{success_count}` Users\n"
+                f"❌ **Failed/Blocked:** `{fail_count}` Users\n"
+                f"👥 **Total Reached:** `{len(users)}` Users"
+            )
+            await status_msg.edit_text(report, parse_mode="Markdown")
+            return
+
+        elif "PERSONAL CLIENT BROADCAST MODE" in reply_text:
+            # Trigger single user broadcast card with this message
+            try:
+                if message.text:
+                    card_text = (
+                        f"📢 **OFFICIAL ANNOUNCEMENT FROM AKKI SERVICES** ⚡\n\n"
+                        f"{message.text}\n\n"
+                        f"💬 Contact Developer: @{ADMIN_USERNAME}"
+                    )
+                    await bot.send_message(
+                        chat_id=target_user_id,
+                        text=card_text,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await bot.copy_message(
+                        chat_id=target_user_id,
+                        from_chat_id=message.chat.id,
+                        message_id=message.message_id
+                    )
+                conf = await message.reply(f"✅ **Personal Broadcast Notice Sent to Client!** (ID: `{target_user_id}`)", parse_mode="Markdown")
+                asyncio.create_task(delete_after(conf, 4))
+                return
+            except Exception as e:
+                err = await message.reply(f"❌ **Failed to send:** `{e}`", parse_mode="Markdown")
+                asyncio.create_task(delete_after(err, 5))
+                return
+
+    # Normal 1-on-1 chat relay to client PM
     try:
         if message.text:
             await bot.send_message(
@@ -204,7 +541,6 @@ async def handle_group_admin_message(message: Message, bot: Bot):
                 message_id=message.message_id
             )
 
-        # Auto Like Reaction on Admin's Message
         try:
             await bot.set_message_reaction(
                 chat_id=message.chat.id,
@@ -214,7 +550,6 @@ async def handle_group_admin_message(message: Message, bot: Bot):
         except Exception:
             pass
 
-        # Short delivery confirmation in group (auto-deleted in 3s)
         confirm_group = await message.reply("✅ *Sent*", parse_mode="Markdown")
         asyncio.create_task(delete_after(confirm_group, 3))
     except Exception as e:
@@ -226,12 +561,11 @@ async def handle_group_admin_message(message: Message, bot: Bot):
         asyncio.create_task(delete_after(err_msg, 5))
 
 # -------------------------------------------------------------
-# 3. USER SENDS MESSAGE IN PM -> FORWARD INTO USER'S TOPIC (SHORT & CLEAN)
+# 6. USER PM MESSAGES (RELAID TO FORUM TOPIC)
 # -------------------------------------------------------------
 
 @relay_router.message(F.chat.type == ChatType.PRIVATE)
 async def handle_user_pm_message(message: Message, bot: Bot):
-    # Ignore slash commands (they are handled by user_router)
     if message.text and message.text.startswith("/"):
         return
 
@@ -239,20 +573,17 @@ async def handle_user_pm_message(message: Message, bot: Bot):
     admin_group_id = await db.get_admin_group_id()
 
     if not admin_group_id:
-        # If group is not linked yet
         await message.reply(
             f"💬 *Message received! DM: @{ADMIN_USERNAME}*",
             parse_mode="Markdown"
         )
         return
 
-    # Get or automatically create user topic in the group
     thread_id = await get_or_create_user_topic(bot, admin_group_id, user)
 
     try:
         sent_group_msg = None
 
-        # Send clean message directly into the topic without bulky headers
         if message.text:
             sent_group_msg = await bot.send_message(
                 chat_id=admin_group_id,
@@ -307,14 +638,12 @@ async def handle_user_pm_message(message: Message, bot: Bot):
             )
 
         if sent_group_msg:
-            # Save mapping so replies in the group can also be tracked
             await db.save_message_mapping(
                 group_message_id=sent_group_msg.message_id,
                 user_id=user.id,
                 user_message_id=message.message_id
             )
 
-        # Auto Like Reaction on User's Message
         try:
             await bot.set_message_reaction(
                 chat_id=message.chat.id,
@@ -324,7 +653,6 @@ async def handle_user_pm_message(message: Message, bot: Bot):
         except Exception:
             pass
 
-        # Short confirmation to user (auto-deleted in 3s)
         confirm_user = await message.reply(
             "✅ *Message sent to Akki!*",
             parse_mode="Markdown"
@@ -337,299 +665,3 @@ async def handle_user_pm_message(message: Message, bot: Bot):
             parse_mode="Markdown"
         )
         asyncio.create_task(delete_after(fallback_msg, 5))
-
-# -------------------------------------------------------------
-# 4. ADVANCED SMART TOPIC STATUS SYSTEM (/status)
-# -------------------------------------------------------------
-
-STATUS_CONFIG = {
-    "lead": ("🟡", "LEAD", "NEW LEAD"),
-    "1": ("🟡", "LEAD", "NEW LEAD"),
-    "deal": ("💬", "DISCUSSING", "DISCUSSING REQUIREMENT"),
-    "2": ("💬", "DISCUSSING", "DISCUSSING REQUIREMENT"),
-    "paid": ("💰", "PAID", "PAID CLIENT"),
-    "3": ("💰", "PAID", "PAID CLIENT"),
-    "progress": ("🚀", "IN DEV", "PROJECT IN DEVELOPMENT"),
-    "4": ("🚀", "IN DEV", "PROJECT IN DEVELOPMENT"),
-    "done": ("✅", "DONE", "PROJECT COMPLETED"),
-    "5": ("✅", "DONE", "PROJECT COMPLETED"),
-    "hold": ("⏸️", "HOLD", "ON HOLD"),
-    "6": ("⏸️", "HOLD", "ON HOLD"),
-    "closed": ("🔒", "CLOSED", "TOPIC CLOSED"),
-    "7": ("🔒", "CLOSED", "TOPIC CLOSED")
-}
-
-def topic_status_kb() -> InlineKeyboardMarkup:
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    keyboard = [
-        [
-            InlineKeyboardButton(text="🟡 Lead", callback_data="tstatus:lead"),
-            InlineKeyboardButton(text="💬 Discussing", callback_data="tstatus:deal")
-        ],
-        [
-            InlineKeyboardButton(text="💰 Paid", callback_data="tstatus:paid"),
-            InlineKeyboardButton(text="🚀 In Dev", callback_data="tstatus:progress")
-        ],
-        [
-            InlineKeyboardButton(text="✅ Done", callback_data="tstatus:done"),
-            InlineKeyboardButton(text="⏸️ On Hold", callback_data="tstatus:hold")
-        ],
-        [
-            InlineKeyboardButton(text="🔒 Close Topic", callback_data="tstatus:closed")
-        ]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("status"))
-async def cmd_topic_status(message: Message, command: CommandObject, bot: Bot):
-    thread_id = message.message_thread_id
-    if not thread_id:
-        msg = await message.reply("⚠️ `/status` command ko kisi user ke topic ke andar bhejein!", parse_mode="Markdown")
-        asyncio.create_task(delete_after(msg, 5))
-        return
-
-    target_user_id = await db.get_user_by_thread_id(thread_id)
-    if not target_user_id:
-        msg = await message.reply("⚠️ Yeh topic kisi registered user se linked nahi hai.", parse_mode="Markdown")
-        asyncio.create_task(delete_after(msg, 5))
-        return
-
-    args = (command.args or "").strip().lower().split()
-    
-    if not args:
-        # Show interactive status selector keyboard
-        await message.reply(
-            "🚥 **SELECT TOPIC STATUS:**\n\nChoose a status below to rename & update this client topic:",
-            reply_markup=topic_status_kb(),
-            parse_mode="Markdown"
-        )
-        return
-
-    status_key = args[0]
-    notify_user = len(args) > 1 and args[1] in ["notify", "yes", "true", "pm"]
-    
-    await apply_topic_status(bot, message.chat.id, thread_id, target_user_id, status_key, notify_user, message)
-
-async def apply_topic_status(bot: Bot, group_id: int, thread_id: int, user_id: int, status_key: str, notify_user: bool, trigger_msg: Message = None):
-    if status_key not in STATUS_CONFIG:
-        if trigger_msg:
-            msg = await trigger_msg.reply(
-                "⚠️ **Invalid Status!** Use:\n"
-                "• `/status 1` (Lead) | `/status 2` (Discussing)\n"
-                "• `/status 3` (Paid) | `/status 4` (In Dev)\n"
-                "• `/status 5` (Done) | `/status 6` (Hold) | `/status 7` (Closed)",
-                parse_mode="Markdown"
-            )
-            asyncio.create_task(delete_after(msg, 6))
-        return
-
-    emoji, badge, full_status = STATUS_CONFIG[status_key]
-    user = await db.get_user(user_id)
-    user_name = user["first_name"] if user and user.get("first_name") else "Client"
-    
-    # 1. Rename Forum Topic
-    new_topic_name = f"{emoji} 👤 {user_name[:18]} [{badge}]"
-    try:
-        await bot.edit_forum_topic(
-            chat_id=group_id,
-            message_thread_id=thread_id,
-            name=new_topic_name
-        )
-    except Exception as e:
-        logger.warning(f"Could not edit topic name: {e}")
-
-    # 2. Confirm in Group (auto-deleted in 3s)
-    if trigger_msg:
-        conf = await trigger_msg.reply(f"✅ **Topic Status Updated:** {emoji} `{full_status}`", parse_mode="Markdown")
-        asyncio.create_task(delete_after(conf, 3))
-
-    # 3. Optional User PM Notification
-    if notify_user:
-        try:
-            user_msg = (
-                f"🚦 **PROJECT STATUS UPDATE** ⚡\n\n"
-                f"📌 **Status:** {emoji} **{full_status}**\n"
-                f"💬 Contact Developer: @{ADMIN_USERNAME}"
-            )
-            await bot.send_message(
-                chat_id=user_id,
-                text=user_msg,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logger.warning(f"Could not notify user of status update: {e}")
-
-@relay_router.callback_query(F.data.startswith("tstatus:"))
-async def cb_topic_status_selected(callback: CallbackQuery, bot: Bot):
-    await callback.answer()
-    status_key = callback.data.split(":")[1]
-    thread_id = callback.message.message_thread_id
-    if not thread_id:
-        return
-    
-    target_user_id = await db.get_user_by_thread_id(thread_id)
-    if not target_user_id:
-        return
-        
-    await apply_topic_status(bot, callback.message.chat.id, thread_id, target_user_id, status_key, False, callback.message)
-
-# -------------------------------------------------------------
-# 5. DUAL BROADCAST SYSTEM FOR ADMIN GROUP (/broadcast, /bc)
-# -------------------------------------------------------------
-
-@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("broadcast", "bc", "sendall"))
-async def cmd_broadcast_group(message: Message, command: CommandObject, bot: Bot):
-    """
-    Dual Broadcast System:
-    1. If run in a SPECIFIC USER TOPIC -> Broadcasts / sends special announcement card ONLY to that single user!
-    2. If run in GENERAL or main group -> Broadcasts to ALL registered bot users!
-    """
-    thread_id = message.message_thread_id
-    text_to_send = command.args
-    reply_msg = message.reply_to_message
-
-    if not text_to_send and not reply_msg:
-        usage = (
-            "📢 **BROADCAST SYSTEM USAGE:**\n\n"
-            "• **All Users Broadcast (General Topic):**\n"
-            "  `/broadcast Hello Everyone! New services added in Bot!`\n"
-            "  *ya kisi photo/video ko reply karke `/broadcast` likhein.*\n\n"
-            "• **Single Client Personal Broadcast (User Topic me):**\n"
-            "  User topic ke andar `/broadcast <text>` chalane par sirf us specific client ko announcement card jayega!"
-        )
-        msg = await message.reply(usage, parse_mode="Markdown")
-        asyncio.create_task(delete_after(msg, 10))
-        return
-
-    # Check if inside a user's dedicated topic
-    target_user_id = None
-    if thread_id:
-        target_user_id = await db.get_user_by_thread_id(thread_id)
-
-    # ---------------------------------------------------------
-    # SCENARIO 1: SINGLE USER BROADCAST (Inside User Topic)
-    # ---------------------------------------------------------
-    if target_user_id:
-        try:
-            if reply_msg:
-                await bot.copy_message(
-                    chat_id=target_user_id,
-                    from_chat_id=message.chat.id,
-                    message_id=reply_msg.message_id
-                )
-            else:
-                card_text = (
-                    f"📢 **OFFICIAL ANNOUNCEMENT FROM AKKI SERVICES** ⚡\n\n"
-                    f"{text_to_send}\n\n"
-                    f"💬 Contact Developer: @{ADMIN_USERNAME}"
-                )
-                await bot.send_message(
-                    chat_id=target_user_id,
-                    text=card_text,
-                    parse_mode="Markdown"
-                )
-            
-            conf = await message.reply(f"✅ **Personal Broadcast Notice Sent to Client!** (ID: `{target_user_id}`)", parse_mode="Markdown")
-            asyncio.create_task(delete_after(conf, 4))
-        except Exception as e:
-            err = await message.reply(f"❌ **Failed to send to client:** `{e}`", parse_mode="Markdown")
-            asyncio.create_task(delete_after(err, 5))
-        return
-
-    # ---------------------------------------------------------
-    # SCENARIO 2: ALL USERS BROADCAST (General / Main Group)
-    # ---------------------------------------------------------
-    users = await db.get_all_users()
-    if not users:
-        msg = await message.reply("⚠️ Database me koi users nahi mile.", parse_mode="Markdown")
-        asyncio.create_task(delete_after(msg, 5))
-        return
-
-    status_msg = await message.reply(f"⏳ **Broadcasting message to {len(users)} users...**", parse_mode="Markdown")
-
-    success_count = 0
-    fail_count = 0
-
-    for u in users:
-        uid = u["user_id"]
-        try:
-            if reply_msg:
-                await bot.copy_message(
-                    chat_id=uid,
-                    from_chat_id=message.chat.id,
-                    message_id=reply_msg.message_id
-                )
-            else:
-                card_text = (
-                    f"📢 **AKKI SERVICES ANNOUNCEMENT** ⚡\n\n"
-                    f"{text_to_send}\n\n"
-                    f"💬 Direct DM: @{ADMIN_USERNAME}"
-                )
-                await bot.send_message(
-                    chat_id=uid,
-                    text=card_text,
-                    parse_mode="Markdown"
-                )
-            success_count += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            fail_count += 1
-
-    report = (
-        "📢 **BROADCAST COMPLETED!** 🚀\n"
-        "─────────────────────────\n"
-        f"✅ **Delivered:** `{success_count}` Users\n"
-        f"❌ **Failed/Blocked:** `{fail_count}` Users\n"
-        f"👥 **Total Reached:** `{len(users)}` Users"
-    )
-    await status_msg.edit_text(report, parse_mode="Markdown")
-
-# -------------------------------------------------------------
-# 6. BUTTON CALLBACK HANDLERS FOR BROADCAST & CONTROL PANEL
-# -------------------------------------------------------------
-
-@relay_router.callback_query(F.data.startswith("btn_bc_single:"))
-async def cb_btn_bc_single(callback: CallbackQuery):
-    await callback.answer()
-    user_id = callback.data.split(":")[1]
-    prompt = (
-        f"📢 **PERSONAL CLIENT BROADCAST MODE** ⚡\n\n"
-        f"Is message ko **REPLY** karke text, photo ya video bhejein — wo DIRECT User ID `{user_id}` ko Official Notice card ki tarah deliver hoga!\n\n"
-        f"*(ya `/broadcast <your_text>` likhein)*"
-    )
-    await callback.message.reply(prompt, parse_mode="Markdown")
-
-@relay_router.callback_query(F.data.startswith("btn_status_menu:"))
-async def cb_btn_status_menu(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.reply(
-        "🚥 **SELECT TOPIC STATUS:**\n\nChoose a status below to rename & update this client topic:",
-        reply_markup=topic_status_kb(),
-        parse_mode="Markdown"
-    )
-
-@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("panel", "admin", "bcpanel"))
-async def cmd_admin_panel_group(message: Message):
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    panel_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📢 Broadcast All Users", callback_data="btn_bc_all_prompt")
-        ]
-    ])
-    await message.reply(
-        "⚡ **ADMIN BROADCAST CONTROL PANEL** ⚡\n\n"
-        "• All Users ko message bhejne ke liye niche button dabayein ya `/broadcast <text>` likhein.\n"
-        "• Single Client ko topic me `📢 Send Notice` button dabayein.",
-        reply_markup=panel_kb,
-        parse_mode="Markdown"
-    )
-
-@relay_router.callback_query(F.data == "btn_bc_all_prompt")
-async def cb_btn_bc_all_prompt(callback: CallbackQuery):
-    await callback.answer()
-    prompt = (
-        "📢 **ALL USERS BROADCAST MODE** 🚀\n\n"
-        "Is message ko **REPLY** karke wo Text, Photo ya Video bhejein jo aap **SABHI USERS** ko broadcast karna chahte hain!\n\n"
-        "*(ya `# General` me `/broadcast <your_text>` likhkar send karein)*"
-    )
-    await callback.message.reply(prompt, parse_mode="Markdown")
