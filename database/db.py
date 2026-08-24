@@ -161,7 +161,11 @@ class Database:
     async def get_all_users(self):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute("SELECT user_id, username, first_name FROM users WHERE is_banned = 0")
+            cursor = await db.execute("""
+                SELECT user_id, username, first_name FROM users WHERE COALESCE(is_banned, 0) = 0
+                UNION
+                SELECT user_id, '' as username, 'Client' as first_name FROM user_topics
+            """)
             return await cursor.fetchall()
 
     async def get_all_users_full(self):
