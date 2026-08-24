@@ -54,21 +54,19 @@ async def start_web_server():
     logger.info(f"Web server successfully bound to 0.0.0.0:{port}")
 
 async def setup_bot_commands(bot: Bot):
-    commands = [
-        BotCommand(command="start", description="🚀 Start Bot & Main Menu"),
-        BotCommand(command="myid", description="🆔 Get your Telegram User ID")
-    ]
     try:
-        await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+        # Delete slash commands menu suggestions (/start, /myid)
+        await bot.delete_my_commands(scope=BotCommandScopeDefault())
+        # Retain WebApp persistent store button
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(
                 text="📱 Store",
                 web_app=WebAppInfo(url=WEBAPP_URL)
             )
         )
-        logger.info("Bot commands menu and WebApp button registered successfully.")
+        logger.info("Slash commands deleted and WebApp button registered successfully.")
     except Exception as e:
-        logger.warning(f"Failed to set bot commands: {e}")
+        logger.warning(f"Failed to update bot commands menu: {e}")
 
 async def main():
     logger.info("Initializing Database...")
