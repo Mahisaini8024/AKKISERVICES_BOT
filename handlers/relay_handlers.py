@@ -323,3 +323,138 @@ async def handle_user_pm_message(message: Message, bot: Bot):
             parse_mode="Markdown"
         )
         asyncio.create_task(delete_after(fallback_msg, 5))
+
+# -------------------------------------------------------------
+# 4. ADVANCED SMART TOPIC STATUS SYSTEM (/status)
+# -------------------------------------------------------------
+
+STATUS_CONFIG = {
+    "lead": ("🟡", "LEAD", "NEW LEAD"),
+    "1": ("🟡", "LEAD", "NEW LEAD"),
+    "deal": ("💬", "DISCUSSING", "DISCUSSING REQUIREMENT"),
+    "2": ("💬", "DISCUSSING", "DISCUSSING REQUIREMENT"),
+    "paid": ("💰", "PAID", "PAID CLIENT"),
+    "3": ("💰", "PAID", "PAID CLIENT"),
+    "progress": ("🚀", "IN DEV", "PROJECT IN DEVELOPMENT"),
+    "4": ("🚀", "IN DEV", "PROJECT IN DEVELOPMENT"),
+    "done": ("✅", "DONE", "PROJECT COMPLETED"),
+    "5": ("✅", "DONE", "PROJECT COMPLETED"),
+    "hold": ("⏸️", "HOLD", "ON HOLD"),
+    "6": ("⏸️", "HOLD", "ON HOLD"),
+    "closed": ("🔒", "CLOSED", "TOPIC CLOSED"),
+    "7": ("🔒", "CLOSED", "TOPIC CLOSED")
+}
+
+def topic_status_kb() -> InlineKeyboardMarkup:
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    keyboard = [
+        [
+            InlineKeyboardButton(text="🟡 Lead", callback_data="tstatus:lead"),
+            InlineKeyboardButton(text="💬 Discussing", callback_data="tstatus:deal")
+        ],
+        [
+            InlineKeyboardButton(text="💰 Paid", callback_data="tstatus:paid"),
+            InlineKeyboardButton(text="🚀 In Dev", callback_data="tstatus:progress")
+        ],
+        [
+            InlineKeyboardButton(text="✅ Done", callback_data="tstatus:done"),
+            InlineKeyboardButton(text="⏸️ On Hold", callback_data="tstatus:hold")
+        ],
+        [
+            InlineKeyboardButton(text="🔒 Close Topic", callback_data="tstatus:closed")
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("status"))
+async def cmd_topic_status(message: Message, command: CommandObject, bot: Bot):
+    thread_id = message.message_thread_id
+    if not thread_id:
+        msg = await message.reply("⚠️ `/status` command ko kisi user ke topic ke andar bhejein!", parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 5))
+        return
+
+    target_user_id = await db.get_user_by_thread_id(thread_id)
+    if not target_user_id:
+        msg = await message.reply("⚠️ Yeh topic kisi registered user se linked nahi hai.", parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 5))
+        return
+
+    args = (command.args or "").strip().lower().split()
+    
+    if not args:
+        # Show interactive status selector keyboard
+        await message.reply(
+            "🚥 **SELECT TOPIC STATUS:**\n\nChoose a status below to rename & update this client topic:",
+            reply_markup=topic_status_kb(),
+            parse_mode="Markdown"
+        )
+        return
+
+    status_key = args[0]
+    notify_user = len(args) > 1 and args[1] in ["notify", "yes", "true", "pm"]
+    
+    await apply_topic_status(bot, message.chat.id, thread_id, target_user_id, status_key, notify_user, message)
+
+async def apply_topic_status(bot: Bot, group_id: int, thread_id: int, user_id: int, status_key: str, notify_user: bool, trigger_msg: Message = None):
+    if status_key not in STATUS_CONFIG:
+        if trigger_msg:
+            msg = await trigger_msg.reply(
+                "⚠️ **Invalid Status!** Use:\n"
+                "• `/status 1` (Lead) | `/status 2` (Discussing)\n"
+                "• `/status 3` (Paid) | `/status 4` (In Dev)\n"
+                "• `/status 5` (Done) | `/status 6` (Hold) | `/status 7` (Closed)",
+                parse_mode="Markdown"
+            )
+            asyncio.create_task(delete_after(msg, 6))
+        return
+
+    emoji, badge, full_status = STATUS_CONFIG[status_key]
+    user = await db.get_user(user_id)
+    user_name = user["first_name"] if user and user.get("first_name") else "Client"
+    
+    # 1. Rename Forum Topic
+    new_topic_name = f"{emoji} 👤 {user_name[:18]} [{badge}]"
+    try:
+        await bot.edit_forum_topic(
+            chat_id=group_id,
+            message_thread_id=thread_id,
+            name=new_topic_name
+        )
+    except Exception as e:
+        logger.warning(f"Could not edit topic name: {e}")
+
+    # 2. Confirm in Group (auto-deleted in 3s)
+    if trigger_msg:
+        conf = await trigger_msg.reply(f"✅ **Topic Status Updated:** {emoji} `{full_status}`", parse_mode="Markdown")
+        asyncio.create_task(delete_after(conf, 3))
+
+    # 3. Optional User PM Notification
+    if notify_user:
+        try:
+            user_msg = (
+                f"🚦 **PROJECT STATUS UPDATE** ⚡\n\n"
+                f"📌 **Status:** {emoji} **{full_status}**\n"
+                f"💬 Contact Developer: @{ADMIN_USERNAME}"
+            )
+            await bot.send_message(
+                chat_id=user_id,
+                text=user_msg,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.warning(f"Could not notify user of status update: {e}")
+
+@relay_router.callback_query(F.data.startswith("tstatus:"))
+async def cb_topic_status_selected(callback: CallbackQuery, bot: Bot):
+    await callback.answer()
+    status_key = callback.data.split(":")[1]
+    thread_id = callback.message.message_thread_id
+    if not thread_id:
+        return
+    
+    target_user_id = await db.get_user_by_thread_id(thread_id)
+    if not target_user_id:
+        return
+        
+    await apply_topic_status(bot, callback.message.chat.id, thread_id, target_user_id, status_key, False, callback.message)
