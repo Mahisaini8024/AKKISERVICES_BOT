@@ -156,7 +156,13 @@ class Database:
 
     async def get_user_count(self) -> int:
         async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute("SELECT COUNT(*) FROM users")
+            cursor = await db.execute("""
+                SELECT COUNT(DISTINCT user_id) FROM (
+                    SELECT user_id FROM users
+                    UNION
+                    SELECT user_id FROM user_topics
+                )
+            """)
             row = await cursor.fetchone()
             return row[0] if row else 0
 
@@ -468,7 +474,13 @@ class Database:
 
     async def get_leads_count(self) -> int:
         async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute("SELECT COUNT(*) FROM leads")
+            cursor = await db.execute("""
+                SELECT COUNT(DISTINCT user_id) FROM (
+                    SELECT user_id FROM leads
+                    UNION
+                    SELECT user_id FROM user_topics
+                )
+            """)
             row = await cursor.fetchone()
             return row[0] if row else 0
 
