@@ -74,6 +74,8 @@ class Database:
                 await db.execute("ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0")
             if "referral_count" not in columns:
                 await db.execute("ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0")
+            if "is_banned" not in columns:
+                await db.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
 
             # Admins table
             await db.execute("""
@@ -161,12 +163,36 @@ class Database:
     async def get_all_users(self):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute("""
-                SELECT user_id, username, first_name FROM users WHERE COALESCE(is_banned, 0) = 0
-                UNION
-                SELECT user_id, '' as username, 'Client' as first_name FROM user_topics
-            """)
-            return await cursor.fetchall()
+            users_map = {}
+            # 1. Fetch from users table
+            try:
+                cursor = await db.execute("SELECT user_id, username, first_name FROM users")
+                rows = await cursor.fetchall()
+                for r in rows:
+                    users_map[r["user_id"]] = {
+                        "user_id": r["user_id"],
+                        "username": r["username"] or "",
+                        "first_name": r["first_name"] or "Client"
+                    }
+            except Exception as e:
+                logger.warning(f"Error fetching users: {e}")
+
+            # 2. Fetch from user_topics table
+            try:
+                cursor = await db.execute("SELECT user_id FROM user_topics")
+                rows = await cursor.fetchall()
+                for r in rows:
+                    uid = r["user_id"]
+                    if uid not in users_map:
+                        users_map[uid] = {
+                            "user_id": uid,
+                            "username": "",
+                            "first_name": "Client"
+                        }
+            except Exception as e:
+                logger.warning(f"Error fetching user_topics: {e}")
+
+            return list(users_map.values())
 
     async def get_all_users_full(self):
         async with aiosqlite.connect(self.db_path) as db:
