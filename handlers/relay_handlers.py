@@ -44,19 +44,33 @@ async def get_or_create_user_topic(bot: Bot, group_id: int, user, referrer_str: 
         thread_id = topic.message_thread_id
         await db.save_user_topic(user.id, thread_id)
 
-        # Short & clean profile header
+        # Short & clean profile header with Action Buttons
         username_str = f"@{user.username}" if user.username else "No Username"
         profile_card = (
             f"👤 **Client:** {user.first_name} {user.last_name or ''} ({username_str})\n"
             f"🆔 **ID:** `{user.id}` | 🎁 **Source:** {referrer_str}\n"
             f"💬 *Reply in this topic to chat with client.*"
         )
-        await bot.send_message(
+        
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        action_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📢 Send Notice", callback_data=f"btn_bc_single:{user.id}"),
+                InlineKeyboardButton(text="🚥 Change Status", callback_data=f"btn_status_menu:{user.id}")
+            ]
+        ])
+
+        header_msg = await bot.send_message(
             chat_id=group_id,
             message_thread_id=thread_id,
             text=profile_card,
+            reply_markup=action_kb,
             parse_mode="Markdown"
         )
+        try:
+            await bot.pin_chat_message(chat_id=group_id, message_id=header_msg.message_id)
+        except Exception:
+            pass
         return thread_id
     except Exception as e:
         logger.warning(f"Could not create forum topic for user {user.id} in group {group_id}: {e}")
@@ -569,3 +583,53 @@ async def cmd_broadcast_group(message: Message, command: CommandObject, bot: Bot
         f"👥 **Total Reached:** `{len(users)}` Users"
     )
     await status_msg.edit_text(report, parse_mode="Markdown")
+
+# -------------------------------------------------------------
+# 6. BUTTON CALLBACK HANDLERS FOR BROADCAST & CONTROL PANEL
+# -------------------------------------------------------------
+
+@relay_router.callback_query(F.data.startswith("btn_bc_single:"))
+async def cb_btn_bc_single(callback: CallbackQuery):
+    await callback.answer()
+    user_id = callback.data.split(":")[1]
+    prompt = (
+        f"📢 **PERSONAL CLIENT BROADCAST MODE** ⚡\n\n"
+        f"Is message ko **REPLY** karke text, photo ya video bhejein — wo DIRECT User ID `{user_id}` ko Official Notice card ki tarah deliver hoga!\n\n"
+        f"*(ya `/broadcast <your_text>` likhein)*"
+    )
+    await callback.message.reply(prompt, parse_mode="Markdown")
+
+@relay_router.callback_query(F.data.startswith("btn_status_menu:"))
+async def cb_btn_status_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.reply(
+        "🚥 **SELECT TOPIC STATUS:**\n\nChoose a status below to rename & update this client topic:",
+        reply_markup=topic_status_kb(),
+        parse_mode="Markdown"
+    )
+
+@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("panel", "admin", "bcpanel"))
+async def cmd_admin_panel_group(message: Message):
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    panel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📢 Broadcast All Users", callback_data="btn_bc_all_prompt")
+        ]
+    ])
+    await message.reply(
+        "⚡ **ADMIN BROADCAST CONTROL PANEL** ⚡\n\n"
+        "• All Users ko message bhejne ke liye niche button dabayein ya `/broadcast <text>` likhein.\n"
+        "• Single Client ko topic me `📢 Send Notice` button dabayein.",
+        reply_markup=panel_kb,
+        parse_mode="Markdown"
+    )
+
+@relay_router.callback_query(F.data == "btn_bc_all_prompt")
+async def cb_btn_bc_all_prompt(callback: CallbackQuery):
+    await callback.answer()
+    prompt = (
+        "📢 **ALL USERS BROADCAST MODE** 🚀\n\n"
+        "Is message ko **REPLY** karke wo Text, Photo ya Video bhejein jo aap **SABHI USERS** ko broadcast karna chahte hain!\n\n"
+        "*(ya `# General` me `/broadcast <your_text>` likhkar send karein)*"
+    )
+    await callback.message.reply(prompt, parse_mode="Markdown")
