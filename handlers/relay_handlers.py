@@ -458,3 +458,114 @@ async def cb_topic_status_selected(callback: CallbackQuery, bot: Bot):
         return
         
     await apply_topic_status(bot, callback.message.chat.id, thread_id, target_user_id, status_key, False, callback.message)
+
+# -------------------------------------------------------------
+# 5. DUAL BROADCAST SYSTEM FOR ADMIN GROUP (/broadcast, /bc)
+# -------------------------------------------------------------
+
+@relay_router.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}), Command("broadcast", "bc", "sendall"))
+async def cmd_broadcast_group(message: Message, command: CommandObject, bot: Bot):
+    """
+    Dual Broadcast System:
+    1. If run in a SPECIFIC USER TOPIC -> Broadcasts / sends special announcement card ONLY to that single user!
+    2. If run in GENERAL or main group -> Broadcasts to ALL registered bot users!
+    """
+    thread_id = message.message_thread_id
+    text_to_send = command.args
+    reply_msg = message.reply_to_message
+
+    if not text_to_send and not reply_msg:
+        usage = (
+            "📢 **BROADCAST SYSTEM USAGE:**\n\n"
+            "• **All Users Broadcast (General Topic):**\n"
+            "  `/broadcast Hello Everyone! New services added in Bot!`\n"
+            "  *ya kisi photo/video ko reply karke `/broadcast` likhein.*\n\n"
+            "• **Single Client Personal Broadcast (User Topic me):**\n"
+            "  User topic ke andar `/broadcast <text>` chalane par sirf us specific client ko announcement card jayega!"
+        )
+        msg = await message.reply(usage, parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 10))
+        return
+
+    # Check if inside a user's dedicated topic
+    target_user_id = None
+    if thread_id:
+        target_user_id = await db.get_user_by_thread_id(thread_id)
+
+    # ---------------------------------------------------------
+    # SCENARIO 1: SINGLE USER BROADCAST (Inside User Topic)
+    # ---------------------------------------------------------
+    if target_user_id:
+        try:
+            if reply_msg:
+                await bot.copy_message(
+                    chat_id=target_user_id,
+                    from_chat_id=message.chat.id,
+                    message_id=reply_msg.message_id
+                )
+            else:
+                card_text = (
+                    f"📢 **OFFICIAL ANNOUNCEMENT FROM AKKI SERVICES** ⚡\n\n"
+                    f"{text_to_send}\n\n"
+                    f"💬 Contact Developer: @{ADMIN_USERNAME}"
+                )
+                await bot.send_message(
+                    chat_id=target_user_id,
+                    text=card_text,
+                    parse_mode="Markdown"
+                )
+            
+            conf = await message.reply(f"✅ **Personal Broadcast Notice Sent to Client!** (ID: `{target_user_id}`)", parse_mode="Markdown")
+            asyncio.create_task(delete_after(conf, 4))
+        except Exception as e:
+            err = await message.reply(f"❌ **Failed to send to client:** `{e}`", parse_mode="Markdown")
+            asyncio.create_task(delete_after(err, 5))
+        return
+
+    # ---------------------------------------------------------
+    # SCENARIO 2: ALL USERS BROADCAST (General / Main Group)
+    # ---------------------------------------------------------
+    users = await db.get_all_users()
+    if not users:
+        msg = await message.reply("⚠️ Database me koi users nahi mile.", parse_mode="Markdown")
+        asyncio.create_task(delete_after(msg, 5))
+        return
+
+    status_msg = await message.reply(f"⏳ **Broadcasting message to {len(users)} users...**", parse_mode="Markdown")
+
+    success_count = 0
+    fail_count = 0
+
+    for u in users:
+        uid = u["user_id"]
+        try:
+            if reply_msg:
+                await bot.copy_message(
+                    chat_id=uid,
+                    from_chat_id=message.chat.id,
+                    message_id=reply_msg.message_id
+                )
+            else:
+                card_text = (
+                    f"📢 **AKKI SERVICES ANNOUNCEMENT** ⚡\n\n"
+                    f"{text_to_send}\n\n"
+                    f"💬 Direct DM: @{ADMIN_USERNAME}"
+                )
+                await bot.send_message(
+                    chat_id=uid,
+                    text=card_text,
+                    parse_mode="Markdown"
+                )
+            success_count += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            fail_count += 1
+
+    report = (
+        "📢 **BROADCAST COMPLETED!** 🚀\n"
+        "─────────────────────────\n"
+        f"✅ **Delivered:** `{success_count}` Users\n"
+        f"❌ **Failed/Blocked:** `{fail_count}` Users\n"
+        f"👥 **Total Reached:** `{len(users)}` Users"
+    )
+    await status_msg.edit_text(report, parse_mode="Markdown")
