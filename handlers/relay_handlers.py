@@ -134,19 +134,19 @@ def admin_control_reply_kb() -> ReplyKeyboardMarkup:
     keyboard = [
         [
             KeyboardButton(text="🚀 Active Leads"),
-            KeyboardButton(text="📢 All Broadcast")
+            KeyboardButton(text="📁 All Topics")
         ],
         [
-            KeyboardButton(text="📢 Client Notice"),
-            KeyboardButton(text="🛒 Services List")
+            KeyboardButton(text="📢 All Broadcast"),
+            KeyboardButton(text="📢 Client Notice")
         ],
         [
-            KeyboardButton(text="🎁 Referral Stats"),
-            KeyboardButton(text="📊 Executive Stats")
+            KeyboardButton(text="🛒 Services List"),
+            KeyboardButton(text="🎁 Referral Stats")
         ],
         [
-            KeyboardButton(text="📬 Export Leads CSV"),
-            KeyboardButton(text="🛡️ Admin Status")
+            KeyboardButton(text="📊 Executive Stats"),
+            KeyboardButton(text="📬 Export Leads CSV")
         ]
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -163,6 +163,22 @@ async def cmd_admin_panel_group(message: Message):
 # -------------------------------------------------------------
 # 2.1 BUSINESS BUTTON HANDLERS FOR AKKI SERVICES BOT
 # -------------------------------------------------------------
+
+@relay_router.message(F.text == "📁 All Topics")
+async def handle_btn_all_topics(message: Message):
+    total_users = await db.get_user_count()
+    leads_count = await db.get_leads_count()
+    text = (
+        f"📁 **TOTAL CLIENT TOPICS SUMMARY ({total_users} Topics)** ⚡\n"
+        "──────────────────────────────\n"
+        f"🎯 **Target Imported Leads:** `149 Topics`\n"
+        f"👤 **Active User Topics:** `{max(0, total_users - 149)} Topics`\n"
+        f"💼 **Total Lead Records:** `{leads_count}`\n"
+        "──────────────────────────────\n"
+        "💬 **Topic Quick Action:**\n"
+        "Group ke kisi bhi topic me jayein aur header me **`📢 Send Notice`** ya **`🚥 Change Status`** button dabayein!"
+    )
+    await message.reply(text, parse_mode="Markdown")
 
 @relay_router.message(F.text == "🚀 Active Leads")
 async def handle_btn_active_leads(message: Message):
