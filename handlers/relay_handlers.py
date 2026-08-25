@@ -49,24 +49,12 @@ async def get_or_create_user_topic(bot: Bot, group_id: int, user, referrer_str: 
             f"💬 *Reply in this topic to chat with client.*"
         )
         
-        action_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📢 Send Notice", callback_data=f"btn_bc_single:{user.id}"),
-                InlineKeyboardButton(text="🚥 Change Status", callback_data=f"btn_status_menu:{user.id}")
-            ]
-        ])
-
         header_msg = await bot.send_message(
             chat_id=group_id,
             message_thread_id=thread_id,
             text=profile_card,
-            reply_markup=action_kb,
             parse_mode="Markdown"
         )
-        try:
-            await bot.pin_chat_message(chat_id=group_id, message_id=header_msg.message_id)
-        except Exception:
-            pass
         return thread_id
     except Exception as e:
         logger.warning(f"Could not create forum topic for user {user.id} in group {group_id}: {e}")
@@ -138,11 +126,7 @@ def admin_control_reply_kb() -> ReplyKeyboardMarkup:
         ],
         [
             KeyboardButton(text="📢 All Broadcast"),
-            KeyboardButton(text="📢 Client Notice")
-        ],
-        [
-            KeyboardButton(text="🛒 Services List"),
-            KeyboardButton(text="🎁 Referral Stats")
+            KeyboardButton(text="🛒 Services List")
         ],
         [
             KeyboardButton(text="📊 Executive Stats"),
